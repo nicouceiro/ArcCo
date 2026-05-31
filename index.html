@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Interior Designer — MVP</title>
+    <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+  </head>
+  <body style="margin:0">
+    <a-scene background="color: #ECECEC" cursor="rayOrigin: mouse" raycaster="objects: [data-floor]">
+      <!-- Lighting -->
+      <a-entity light="type: ambient; intensity: 0.6"></a-entity>
+      <a-entity light="type: directional; intensity: 0.8" position="-1 3 2"></a-entity>
+
+      <!-- Room: floor (tappable) + two walls -->
+      <a-plane data-floor position="0 0 0" rotation="-90 0 0" width="6" height="6" color="#D9CBB8"></a-plane>
+      <a-plane position="0 1.5 -3" width="6" height="3" color="#F2EDE4"></a-plane>
+      <a-plane position="-3 1.5 0" rotation="0 90 0" width="6" height="3" color="#E8E1D4"></a-plane>
+
+      <!-- Camera at standing height, looking into the room -->
+      <a-entity position="0 1.6 2.5">
+        <a-camera look-controls="reverseMouseDrag: true" wasd-controls-enabled="false"></a-camera>
+      </a-entity>
+    </a-scene>
+
+    <!-- Touch menu -->
+    <div style="position:fixed;bottom:0;left:0;right:0;display:flex;gap:8px;padding:10px;background:rgba(255,255,255,.9);font-family:sans-serif">
+      <button data-item="sofa">Sofa</button>
+      <button data-item="table">Table</button>
+      <button data-item="lamp">Lamp</button>
+      <button id="clear" style="margin-left:auto">Clear</button>
+    </div>
+
+    <script>
+      // Each preset rests on the floor (y = half its height)
+      const presets = {
+        sofa:  '<a-box height="0.8" width="2" depth="0.9" position="0 0.4 0" color="#6A8CAF"></a-box>',
+        table: '<a-box height="0.5" width="1" depth="0.6" position="0 0.25 0" color="#8B5E3C"></a-box>',
+        lamp:  '<a-cylinder height="1.5" radius="0.03" position="0 0.75 0" color="#3A3A3A"></a-cylinder>'
+      };
+      let current = 'sofa';
+
+      document.querySelectorAll('button[data-item]').forEach(b =>
+        b.addEventListener('click', () => { current = b.dataset.item; })
+      );
+
+      const scene = document.querySelector('a-scene');
+      scene.addEventListener('click', e => {
+        const hit = e.detail.intersection;
+        if (!hit) return;
+        const p = hit.point;
+        const item = document.createElement('a-entity');
+        item.classList.add('furniture');
+        item.setAttribute('position', `${p.x} 0 ${p.z}`);
+        item.innerHTML = presets[current];
+        scene.appendChild(item);
+      });
+
+      document.getElementById('clear').addEventListener('click', () =>
+        document.querySelectorAll('.furniture').forEach(el => el.remove())
+      );
+    </script>
+  </body>
+</html>
