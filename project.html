@@ -106,11 +106,65 @@
         .eq("project_id", projectId).order("created_at", { ascending: false });
       if (error) { $("list").innerHTML = `<p>${error.message}</p>`; return; }
       $("list").innerHTML = data.map(v => `
-        <div class="viz">
-          <img src="${publicUrl(v.original_path)}" />
+        <div class="viz" data-id="${v.id}">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <div style="flex:1;min-width:140px">
+              <small>Before</small>
+              <img src="${publicUrl(v.original_path)}" />
+            </div>
+            ${v.generated_path ? `
+            <div style="flex:1;min-width:140px">
+              <small>After</small>
+              <img src="${publicUrl(v.generated_path)}" />
+            </div>` : ""}
+          </div>
           <p>${v.prompt || "<em>(no prompt)</em>"}</p>
-          <small>${new Date(v.created_at).toLocaleString()}</small>
+          <small>${new Date(v.created_at).toLocaleString()}</small><br/>
+          ${v.generated_path
+            ? ""
+            : `<button class="gen" data-id="${v.id}" data-url="${publicUrl(v.original_path)}" data-prompt="${(v.prompt||"").replace(/"/g,'&quot;')}">Generate</button>`}
+          <span class="genmsg" style="font-size:13px;margin-left:8px"></span>
         </div>`).join("");
+
+      // Wire up each Generate button
+      document.querySelectorAll("button.gen").forEach(btn => {
+        btn.onclick = () => generate(btn);
+      });
+    }
+
+    async function generate(btn) {
+      const vizId  = btn.dataset.id;
+      const url    = btn.dataset.url;
+      const prompt = btn.dataset.prompt;
+      const note   = btn.parentElement.querySelector(".genmsg");
+      btn.disabled = true; note.textContent = "Generating… (up to ~1 min)";
+
+      try {
+        // 1. Ask our serverless function to run the AI edit
+        const resp = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageUrl: url, prompt })
+        });
+        const out = await resp.json();
+        if (!resp.ok) { note.textContent = out.error || "Error"; btn.disabled = false; return; }
+
+        // 2. base64 → Blob → upload to Storage under our own session
+        const bytes = Uint8Array.from(atob(out.b64), c => c.charCodeAt(0));
+        const blob  = new Blob([bytes], { type: "image/png" });
+        const path  = `${session.user.id}/${projectId}/gen-${Date.now()}.png`;
+        const { error: upErr } = await supabase.storage.from("rooms").upload(path, blob);
+        if (upErr) { note.textContent = upErr.message; btn.disabled = false; return; }
+
+        // 3. Save the generated path on the row
+        const { error: updErr } = await supabase.from("visualizations")
+          .update({ generated_path: path }).eq("id", vizId);
+        if (updErr) { note.textContent = updErr.message; btn.disabled = false; return; }
+
+        load(); // re-render with before/after
+      } catch (e) {
+        note.textContent = e.message; btn.disabled = false;
+      }
     }
 
     load();
