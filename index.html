@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARCCO — Sign in</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; }
+    body { margin:0; display:grid; place-items:center; min-height:100vh; background:#F2EDE4; }
+    .card { background:#fff; padding:32px; border-radius:16px; width:300px; box-shadow:0 4px 24px rgba(0,0,0,.08); }
+    h1 { margin:0 0 4px; font-size:22px; }
+    p.sub { margin:0 0 20px; color:#777; font-size:13px; }
+    input { width:100%; box-sizing:border-box; padding:10px; margin:6px 0; border:1px solid #ddd; border-radius:8px; font-size:14px; }
+    button { width:100%; padding:11px; margin-top:8px; border:0; border-radius:8px; background:#6A8CAF; color:#fff; font-size:14px; cursor:pointer; }
+    button.ghost { background:transparent; color:#6A8CAF; }
+    .msg { font-size:13px; margin-top:10px; min-height:18px; }
+    .msg.err { color:#c0392b; } .msg.ok { color:#27795b; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>ARCCO</h1>
+    <p class="sub">AI-assisted AR visualization</p>
+    <input id="email" type="email" placeholder="email" autocomplete="email" />
+    <input id="password" type="password" placeholder="password" autocomplete="current-password" />
+    <button id="login">Log in</button>
+    <button id="signup" class="ghost">Create account</button>
+    <div id="msg" class="msg"></div>
+  </div>
+
+  <script type="module">
+    import { supabase } from "./lib/supabase.js";
+
+    const $ = id => document.getElementById(id);
+    const msg = (t, cls="") => { $("msg").textContent = t; $("msg").className = "msg " + cls; };
+
+    // Already signed in? Skip to the app.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) location.href = "./app.html";
+
+    $("login").onclick = async () => {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: $("email").value.trim(), password: $("password").value
+      });
+      if (error) return msg(error.message, "err");
+      location.href = "./app.html";
+    };
+
+    $("signup").onclick = async () => {
+      const { error } = await supabase.auth.signUp({
+        email: $("email").value.trim(), password: $("password").value
+      });
+      if (error) return msg(error.message, "err");
+      msg("Check your email to confirm, then log in.", "ok");
+    };
+  </script>
+</body>
+</html>
