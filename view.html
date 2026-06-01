@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARCCO — Design Preview</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; }
+    body { margin:0; background:#F2EDE4; color:#222; }
+    header { padding:18px 20px; background:#fff; border-bottom:1px solid #eee; }
+    header .brand { font-weight:700; font-size:15px; color:#6A8CAF; }
+    header h1 { font-size:20px; margin:4px 0 0; }
+    main { max-width:680px; margin:24px auto; padding:0 16px; }
+    .viz { background:#fff; padding:16px; border-radius:12px; margin-bottom:16px; box-shadow:0 1px 6px rgba(0,0,0,.05); }
+    .pair { display:flex; gap:10px; flex-wrap:wrap; }
+    .pair > div { flex:1; min-width:150px; }
+    .pair small { color:#999; }
+    .pair img { width:100%; border-radius:8px; }
+    .viz p { font-size:15px; margin:12px 0 4px; }
+    .viz time { color:#999; font-size:13px; }
+    .empty { text-align:center; color:#999; padding:60px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">ARCCO</div>
+    <h1 id="title">Design Preview</h1>
+  </header>
+  <main id="main"><div class="empty">Loading…</div></main>
+
+  <script type="module">
+    import { supabase } from "./lib/supabase.js";
+
+    const projectId = new URLSearchParams(location.search).get("id");
+    const main = document.getElementById("main");
+    if (!projectId) { main.innerHTML = `<div class="empty">Invalid link.</div>`; throw new Error("no id"); }
+
+    function publicUrl(path) {
+      return supabase.storage.from("rooms").getPublicUrl(path).data.publicUrl;
+    }
+
+    // Read the project (only works if is_shared = true, via the public RLS policy)
+    const { data: proj } = await supabase
+      .from("projects").select("name").eq("id", projectId).maybeSingle();
+    if (!proj) {
+      main.innerHTML = `<div class="empty">This preview isn't available.<br/>The designer may not have shared it yet.</div>`;
+      throw new Error("not shared");
+    }
+    document.getElementById("title").textContent = proj.name;
+
+    const { data: vizes } = await supabase
+      .from("visualizations").select("*")
+      .eq("project_id", projectId).order("created_at", { ascending: false });
+
+    if (!vizes || !vizes.length) {
+      main.innerHTML = `<div class="empty">No visualizations yet.</div>`;
+    } else {
+      main.innerHTML = vizes.map(v => `
+        <div class="viz">
+          <div class="pair">
+            <div><small>Current</small><img src="${publicUrl(v.original_path)}" /></div>
+            ${v.generated_path ? `<div><small>Proposed</small><img src="${publicUrl(v.generated_path)}" /></div>` : ""}
+          </div>
+          ${v.prompt ? `<p>${v.prompt}</p>` : ""}
+          <time>${new Date(v.created_at).toLocaleDateString()}</time>
+        </div>`).join("");
+    }
+  </script>
+</body>
+</html>

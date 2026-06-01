@@ -29,6 +29,7 @@
 <body>
   <header>
     <h1 id="title">Project</h1>
+    <button id="share" style="padding:8px 12px;border:1px solid #ddd;background:#fff;border-radius:8px;cursor:pointer;font-size:13px">Share</button>
     <a href="app.html">← All projects</a>
   </header>
   <main>
@@ -58,11 +59,37 @@
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { location.href = "./index.html"; throw new Error("no session"); }
 
-    // Load project name (also confirms ownership via RLS)
+    // Load project name + share state (also confirms ownership via RLS)
     const { data: proj, error: pErr } = await supabase
-      .from("projects").select("name").eq("id", projectId).single();
+      .from("projects").select("name,is_shared").eq("id", projectId).single();
     if (pErr || !proj) { $("title").textContent = "Project not found"; throw new Error("bad project"); }
     $("title").textContent = proj.name;
+
+    // ── Share toggle ──
+    let shared = proj.is_shared;
+    const shareUrl = `${location.origin}/view.html?id=${projectId}`;
+
+    function renderShare() {
+      $("share").textContent = shared ? "Shared ✓ — copy link" : "Share with client";
+    }
+    renderShare();
+
+    $("share").onclick = async () => {
+      if (!shared) {
+        const { error } = await supabase.from("projects")
+          .update({ is_shared: true }).eq("id", projectId);
+        if (error) return alert(error.message);
+        shared = true; renderShare();
+      }
+      // Copy link to clipboard
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        $("share").textContent = "Link copied!";
+        setTimeout(renderShare, 1500);
+      } catch {
+        prompt("Copy this client link:", shareUrl);
+      }
+    };
 
     // Enable Save only when a photo is chosen; show a preview
     let file = null;
