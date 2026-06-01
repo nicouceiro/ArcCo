@@ -42,8 +42,21 @@ export default async function handler(req, res) {
       return res.status(aiResp.status).json({ error: data.error?.message || "OpenAI error" });
     }
 
-    // 4. Return the generated image as base64
-    return res.status(200).json({ b64: data.data[0].b64_json });
+    const item = data?.data?.[0];
+    if (!item) {
+      return res.status(502).json({ error: "Unexpected OpenAI response", raw: data });
+    }
+
+    // 4. Return the generated image as base64 (fetch+convert if a URL came back)
+    if (item.b64_json) {
+      return res.status(200).json({ b64: item.b64_json });
+    }
+    if (item.url) {
+      const r = await fetch(item.url);
+      const b = Buffer.from(await r.arrayBuffer());
+      return res.status(200).json({ b64: b.toString("base64") });
+    }
+    return res.status(502).json({ error: "No image in OpenAI response", raw: data });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }

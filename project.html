@@ -148,9 +148,14 @@
         });
         const out = await resp.json();
         if (!resp.ok) { note.textContent = out.error || "Error"; btn.disabled = false; return; }
+        if (!out.b64) {
+          note.textContent = "No image returned: " + JSON.stringify(out).slice(0, 300);
+          btn.disabled = false; return;
+        }
 
         // 2. base64 → Blob → upload to Storage under our own session
-        const bytes = Uint8Array.from(atob(out.b64), c => c.charCodeAt(0));
+        const clean = out.b64.replace(/\s/g, "");          // strip any whitespace/newlines
+        const bytes = Uint8Array.from(atob(clean), c => c.charCodeAt(0));
         const blob  = new Blob([bytes], { type: "image/png" });
         const path  = `${session.user.id}/${projectId}/gen-${Date.now()}.png`;
         const { error: upErr } = await supabase.storage.from("rooms").upload(path, blob);
