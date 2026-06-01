@@ -52,7 +52,9 @@
       if (error) { $("list").innerHTML = `<div class="empty">${error.message}</div>`; return; }
       if (!data.length) { $("list").innerHTML = `<div class="empty">No projects yet.</div>`; return; }
       $("list").innerHTML = data.map(p =>
-        `<div class="proj"><h3>${p.name}</h3><small>${new Date(p.created_at).toLocaleDateString()}</small></div>`
+        `<a href="project.html?id=${p.id}" style="text-decoration:none;color:inherit">
+           <div class="proj"><h3>${p.name}</h3><small>${new Date(p.created_at).toLocaleDateString()}</small></div>
+         </a>`
       ).join("");
     }
 

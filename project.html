@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARCCO — Project</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; }
+    body { margin:0; background:#F2EDE4; color:#222; }
+    header { display:flex; align-items:center; gap:12px; padding:14px 20px; background:#fff; border-bottom:1px solid #eee; }
+    header a { text-decoration:none; color:#6A8CAF; font-size:13px; }
+    header h1 { font-size:18px; margin:0; flex:1; }
+    main { max-width:640px; margin:24px auto; padding:0 16px; }
+    .panel { background:#fff; padding:18px; border-radius:12px; margin-bottom:20px; box-shadow:0 1px 6px rgba(0,0,0,.05); }
+    label { display:block; font-size:13px; color:#555; margin:10px 0 4px; }
+    input[type=file], textarea { width:100%; box-sizing:border-box; padding:10px; border:1px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; }
+    textarea { min-height:80px; resize:vertical; }
+    button { padding:11px 18px; border:0; border-radius:8px; background:#6A8CAF; color:#fff; cursor:pointer; font-size:14px; margin-top:12px; }
+    button:disabled { opacity:.5; cursor:default; }
+    .preview { max-width:100%; border-radius:8px; margin-top:10px; display:none; }
+    .viz { background:#fff; padding:14px; border-radius:10px; margin-bottom:10px; box-shadow:0 1px 6px rgba(0,0,0,.05); }
+    .viz img { max-width:100%; border-radius:6px; }
+    .viz p { font-size:14px; margin:8px 0 4px; }
+    .viz small { color:#999; }
+    .msg { font-size:13px; margin-top:8px; min-height:16px; }
+    .msg.err { color:#c0392b; } .msg.ok { color:#27795b; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="title">Project</h1>
+    <a href="app.html">← All projects</a>
+  </header>
+  <main>
+    <div class="panel">
+      <label>Room photo</label>
+      <input id="photo" type="file" accept="image/*" />
+      <img id="preview" class="preview" />
+
+      <label>Describe the changes</label>
+      <textarea id="prompt" placeholder="e.g. Replace flooring with herringbone oak, paint walls sage green, add a linen sofa against the far wall."></textarea>
+
+      <button id="save" disabled>Save</button>
+      <div id="msg" class="msg"></div>
+    </div>
+
+    <div id="list"></div>
+  </main>
+
+  <script type="module">
+    import { supabase } from "./lib/supabase.js";
+    const $ = id => document.getElementById(id);
+    const msg = (t, cls="") => { $("msg").textContent = t; $("msg").className = "msg " + cls; };
+
+    const projectId = new URLSearchParams(location.search).get("id");
+    if (!projectId) { location.href = "./app.html"; throw new Error("no project id"); }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { location.href = "./index.html"; throw new Error("no session"); }
+
+    // Load project name (also confirms ownership via RLS)
+    const { data: proj, error: pErr } = await supabase
+      .from("projects").select("name").eq("id", projectId).single();
+    if (pErr || !proj) { $("title").textContent = "Project not found"; throw new Error("bad project"); }
+    $("title").textContent = proj.name;
+
+    // Enable Save only when a photo is chosen; show a preview
+    let file = null;
+    $("photo").onchange = e => {
+      file = e.target.files[0] || null;
+      $("save").disabled = !file;
+      if (file) { $("preview").src = URL.createObjectURL(file); $("preview").style.display = "block"; }
+    };
+
+    $("save").onclick = async () => {
+      if (!file) return;
+      $("save").disabled = true; msg("Uploading…");
+
+      // Unique path: userId/projectId/timestamp.ext
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${session.user.id}/${projectId}/${Date.now()}.${ext}`;
+
+      const { error: upErr } = await supabase.storage.from("rooms").upload(path, file);
+      if (upErr) { msg(upErr.message, "err"); $("save").disabled = false; return; }
+
+      const { error: insErr } = await supabase.from("visualizations").insert({
+        project_id: projectId,
+        prompt: $("prompt").value.trim(),
+        original_path: path,
+        owner: session.user.id
+      });
+      if (insErr) { msg(insErr.message, "err"); $("save").disabled = false; return; }
+
+      msg("Saved.", "ok");
+      $("photo").value = ""; $("prompt").value = ""; $("preview").style.display = "none"; file = null;
+      load();
+    };
+
+    function publicUrl(path) {
+      return supabase.storage.from("rooms").getPublicUrl(path).data.publicUrl;
+    }
+
+    async function load() {
+      const { data, error } = await supabase
+        .from("visualizations").select("*")
+        .eq("project_id", projectId).order("created_at", { ascending: false });
+      if (error) { $("list").innerHTML = `<p>${error.message}</p>`; return; }
+      $("list").innerHTML = data.map(v => `
+        <div class="viz">
+          <img src="${publicUrl(v.original_path)}" />
+          <p>${v.prompt || "<em>(no prompt)</em>"}</p>
+          <small>${new Date(v.created_at).toLocaleString()}</small>
+        </div>`).join("");
+    }
+
+    load();
+  </script>
+</body>
+</html>
