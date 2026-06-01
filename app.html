@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ARCCO — Workspace</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; }
+    body { margin:0; background:#F2EDE4; color:#222; }
+    header { display:flex; align-items:center; gap:12px; padding:14px 20px; background:#fff; border-bottom:1px solid #eee; }
+    header h1 { font-size:18px; margin:0; flex:1; }
+    header button { padding:8px 12px; border:1px solid #ddd; background:#fff; border-radius:8px; cursor:pointer; font-size:13px; }
+    main { max-width:640px; margin:24px auto; padding:0 16px; }
+    .row { display:flex; gap:8px; margin-bottom:20px; }
+    .row input { flex:1; padding:10px; border:1px solid #ddd; border-radius:8px; }
+    .row button { padding:10px 16px; border:0; border-radius:8px; background:#6A8CAF; color:#fff; cursor:pointer; }
+    .proj { background:#fff; padding:14px 16px; border-radius:10px; margin-bottom:10px; box-shadow:0 1px 6px rgba(0,0,0,.05); }
+    .proj h3 { margin:0 0 4px; font-size:15px; }
+    .proj small { color:#888; }
+    .empty { color:#999; text-align:center; padding:40px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ARCCO</h1>
+    <span id="who" style="font-size:13px;color:#888"></span>
+    <button id="logout">Log out</button>
+  </header>
+  <main>
+    <div class="row">
+      <input id="pname" placeholder="New project (e.g. Martinez – Living Room)" />
+      <button id="create">Create</button>
+    </div>
+    <div id="list"><div class="empty">Loading…</div></div>
+  </main>
+
+  <script type="module">
+    import { supabase } from "./lib/supabase.js";
+    const $ = id => document.getElementById(id);
+
+    // Gate: no session → bounce to login.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { location.href = "./index.html"; throw new Error("no session"); }
+    $("who").textContent = session.user.email;
+
+    $("logout").onclick = async () => { await supabase.auth.signOut(); location.href = "./index.html"; };
+
+    async function load() {
+      const { data, error } = await supabase
+        .from("projects").select("id,name,created_at")
+        .order("created_at", { ascending: false });
+      if (error) { $("list").innerHTML = `<div class="empty">${error.message}</div>`; return; }
+      if (!data.length) { $("list").innerHTML = `<div class="empty">No projects yet.</div>`; return; }
+      $("list").innerHTML = data.map(p =>
+        `<div class="proj"><h3>${p.name}</h3><small>${new Date(p.created_at).toLocaleDateString()}</small></div>`
+      ).join("");
+    }
+
+    $("create").onclick = async () => {
+      const name = $("pname").value.trim();
+      if (!name) return;
+      const { error } = await supabase.from("projects")
+        .insert({ name, owner: session.user.id });
+      if (error) return alert(error.message);
+      $("pname").value = "";
+      load();
+    };
+
+    load();
+  </script>
+</body>
+</html>
